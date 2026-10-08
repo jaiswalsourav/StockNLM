@@ -16,6 +16,9 @@ dist/
 # Environment / secrets
 .env
 
+# Downloaded data (regenerate with src/collect.py)
+data/*.csv
+
 # IDE / OS
 .vscode/
 .idea/
