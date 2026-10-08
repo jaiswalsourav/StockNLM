@@ -22,6 +22,9 @@ data/*.csv
 # Downloaded news (regenerate with src/newsCollect.py)
 news/*.csv
 
+# Saved models
+*.joblib
+
 # IDE / OS
 .vscode/
 .idea/
