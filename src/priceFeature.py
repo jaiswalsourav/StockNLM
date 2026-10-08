@@ -17,14 +17,17 @@ def rsi(close: pd.Series, window: int = 14) -> pd.Series:
 
 MARKET_SYMBOL = "NIFTY50"
 PRICE_COLS = [
-    "return_1d", "return_5d", "ma_5_ratio", "ma_20_ratio", "ma_50_ratio",
-    "volatility_20d", "rsi_14", "macd", "volume_change",
+    "return_1d", "return_5d", "ma_5_ratio", "ma_10_ratio", "ma_20_ratio", "ma_50_ratio",
+    "ma_200_ratio", "volatility_20d", "rsi_14", "macd", "volume_change",
 ]
 MARKET_COLS = [
     "market_return_1d", "market_return_5d", "market_ma_20_ratio",
     "market_volatility_20d", "rel_return_1d", "rel_return_5d",
 ]
-FEATURE_COLS = PRICE_COLS + MARKET_COLS
+# NSE delivery data only exists for NSE stocks and roughly the last year (see priceCollect.py)
+DELIVERY_COLS = ["delivery_pct", "delivery_vs_20d"]
+BASE_COLS = PRICE_COLS + MARKET_COLS
+FEATURE_COLS = BASE_COLS + DELIVERY_COLS
 
 
 def market_features(nifty: pd.DataFrame) -> pd.DataFrame:
@@ -46,6 +49,9 @@ def build_features(df: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     out["return_5d"] = close.pct_change(5)
     for w in (5, 20, 50):
         out[f"ma_{w}_ratio"] = close / close.rolling(w).mean() - 1
+    # 10 and 200-day averages come from the columns priceCollect.py already saved
+    out["ma_10_ratio"] = close / df["MA_10"] - 1
+    out["ma_200_ratio"] = close / df["MA_200"] - 1
     out["volatility_20d"] = out["return_1d"].rolling(20).std()
     out["rsi_14"] = rsi(close)
 
@@ -58,6 +64,14 @@ def build_features(df: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     out = out.join(market)
     out["rel_return_1d"] = out["return_1d"] - out["market_return_1d"]
     out["rel_return_5d"] = out["return_5d"] - out["market_return_5d"]
+
+    # Delivery: % of traded shares actually delivered, and today vs its own 20-day average
+    if "Delivery_Pct" in df:
+        out["delivery_pct"] = df["Delivery_Pct"]
+        out["delivery_vs_20d"] = df["Delivery_Pct"] / df["Delivery_Pct"].rolling(20, min_periods=10).mean() - 1
+    else:
+        out["delivery_pct"] = np.nan
+        out["delivery_vs_20d"] = np.nan
 
     # Target: 1 if tomorrow's close is higher than today's, else 0
     out["target"] = (close.shift(-1) > close).astype(int)
@@ -78,7 +92,8 @@ def main() -> None:
             print(f"skip {path.name}: only {len(df)} rows")
             continue
         feats = build_features(df, market)
-        feats = feats.dropna(subset=[c for c in feats.columns if c != "target"])
+        # Delivery columns may stay empty; the models decide whether to require them
+        feats = feats.dropna(subset=BASE_COLS)
         feats.insert(0, "symbol", path.stem)
         frames.append(feats)
         print(f"{path.stem}: {len(feats)} rows")

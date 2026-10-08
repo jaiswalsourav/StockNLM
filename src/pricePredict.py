@@ -19,7 +19,7 @@ MODEL_FILE = ROOT / "data" / "priceModel.joblib"
 
 
 def train(df: pd.DataFrame) -> RandomForestClassifier:
-    labelled = df.dropna(subset=["target"])
+    labelled = df.dropna(subset=["target"] + FEATURE_COLS)  # delivery limits this to NSE stocks, ~1 year
     model = RandomForestClassifier(
         n_estimators=200, max_depth=6, min_samples_leaf=50, n_jobs=-1, random_state=42
     )
@@ -42,9 +42,11 @@ def main() -> None:
     else:
         model = train(df)
         joblib.dump(model, MODEL_FILE)
-        print(f"Trained on {df['target'].notna().sum()} rows, saved {MODEL_FILE.name}")
+        print(f"Trained on {df.dropna(subset=['target'] + FEATURE_COLS).shape[0]} rows, saved {MODEL_FILE.name}")
 
     latest = df[df["symbol"] == args.symbol].sort_index().iloc[[-1]]
+    if latest[FEATURE_COLS].isna().any(axis=None):
+        raise SystemExit(f"{args.symbol} has no delivery data (only NSE stocks do), so it can't be predicted.")
     prob_up = model.predict_proba(latest[FEATURE_COLS])[0][list(model.classes_).index(1.0)]
 
     print(f"\n{args.symbol} as of {latest.index[0].date()}")

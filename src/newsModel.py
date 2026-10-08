@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
-from priceFeature import FEATURE_COLS as PRICE_COLS
+from priceFeature import BASE_COLS as PRICE_COLS
 
 ROOT = Path(__file__).resolve().parent.parent
 NEWS_COLS = ["sentiment", "news_count"]
