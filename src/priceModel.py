@@ -5,11 +5,9 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
+from priceFeature import FEATURE_COLS
+
 FEATURES_FILE = Path(__file__).resolve().parent.parent / "data" / "features.csv"
-FEATURE_COLS = [
-    "return_1d", "return_5d", "ma_5_ratio", "ma_20_ratio", "ma_50_ratio",
-    "volatility_20d", "rsi_14", "macd", "volume_change",
-]
 TEST_FRACTION = 0.2
 
 

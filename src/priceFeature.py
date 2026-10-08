@@ -15,7 +15,30 @@ def rsi(close: pd.Series, window: int = 14) -> pd.Series:
     return 100 - 100 / (1 + gain / loss)
 
 
-def build_features(df: pd.DataFrame) -> pd.DataFrame:
+MARKET_SYMBOL = "NIFTY50"
+PRICE_COLS = [
+    "return_1d", "return_5d", "ma_5_ratio", "ma_20_ratio", "ma_50_ratio",
+    "volatility_20d", "rsi_14", "macd", "volume_change",
+]
+MARKET_COLS = [
+    "market_return_1d", "market_return_5d", "market_ma_20_ratio",
+    "market_volatility_20d", "rel_return_1d", "rel_return_5d",
+]
+FEATURE_COLS = PRICE_COLS + MARKET_COLS
+
+
+def market_features(nifty: pd.DataFrame) -> pd.DataFrame:
+    """NIFTY 50 context, computed once and joined onto every stock by date."""
+    close = nifty["Close"]
+    m = pd.DataFrame(index=nifty.index)
+    m["market_return_1d"] = close.pct_change()
+    m["market_return_5d"] = close.pct_change(5)
+    m["market_ma_20_ratio"] = close / close.rolling(20).mean() - 1
+    m["market_volatility_20d"] = m["market_return_1d"].rolling(20).std()
+    return m
+
+
+def build_features(df: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
     close = df["Close"]
 
@@ -31,6 +54,11 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out["macd"] = (ema12 - ema26) / close
     out["volume_change"] = df["Volume"].pct_change().replace([np.inf, -np.inf], np.nan)
 
+    # Market context: NIFTY features aligned by date, plus the stock's move relative to NIFTY
+    out = out.join(market)
+    out["rel_return_1d"] = out["return_1d"] - out["market_return_1d"]
+    out["rel_return_5d"] = out["return_5d"] - out["market_return_5d"]
+
     # Target: 1 if tomorrow's close is higher than today's, else 0
     out["target"] = (close.shift(-1) > close).astype(int)
     out.loc[close.shift(-1).isna(), "target"] = np.nan
@@ -38,6 +66,9 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
+    nifty = pd.read_csv(DATA_DIR / f"{MARKET_SYMBOL}.csv", index_col=0, parse_dates=True)
+    market = market_features(nifty)
+
     frames = []
     for path in sorted(DATA_DIR.glob("*.csv")):
         if path.name == OUT_FILE.name:
@@ -46,7 +77,7 @@ def main() -> None:
         if len(df) < 100:
             print(f"skip {path.name}: only {len(df)} rows")
             continue
-        feats = build_features(df)
+        feats = build_features(df, market)
         feats = feats.dropna(subset=[c for c in feats.columns if c != "target"])
         feats.insert(0, "symbol", path.stem)
         frames.append(feats)

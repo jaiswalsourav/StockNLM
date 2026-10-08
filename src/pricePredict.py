@@ -11,13 +11,11 @@ import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
+from priceFeature import FEATURE_COLS
+
 ROOT = Path(__file__).resolve().parent.parent
 FEATURES_FILE = ROOT / "data" / "features.csv"
 MODEL_FILE = ROOT / "data" / "priceModel.joblib"
-FEATURE_COLS = [
-    "return_1d", "return_5d", "ma_5_ratio", "ma_20_ratio", "ma_50_ratio",
-    "volatility_20d", "rsi_14", "macd", "volume_change",
-]
 
 
 def train(df: pd.DataFrame) -> RandomForestClassifier:
