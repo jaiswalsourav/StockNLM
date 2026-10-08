@@ -5,3 +5,5 @@ scikit-learn
 feedparser
 requests
 streamlit
+transformers
+torch
