@@ -19,6 +19,9 @@ dist/
 # Downloaded data (regenerate with src/collect.py)
 data/*.csv
 
+# Downloaded news (regenerate with src/newsCollect.py)
+news/*.csv
+
 # IDE / OS
 .vscode/
 .idea/
