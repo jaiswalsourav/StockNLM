@@ -30,3 +30,6 @@ news/*.csv
 .idea/
 .DS_Store
 Thumbs.db
+
+# Market-wide series (FII/DII)
+data/market/*.csv

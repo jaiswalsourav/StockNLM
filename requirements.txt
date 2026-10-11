@@ -7,3 +7,5 @@ requests
 streamlit
 transformers
 torch
+xlrd
+openpyxl

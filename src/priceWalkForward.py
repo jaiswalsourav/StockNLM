@@ -11,11 +11,17 @@ from pathlib import Path
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-from priceFeature import MARKET_COLS, PRICE_COLS
+from priceFeature import BASE_COLS, FII_COLS, MARKET_COLS, PRICE_COLS, SECTOR_COLS
 
 FEATURES_FILE = Path(__file__).resolve().parent.parent / "data" / "features.csv"
 MIN_TRAIN_MONTHS = 12
-FEATURE_SETS = {"price only": PRICE_COLS, "price + market": PRICE_COLS + MARKET_COLS}
+FEATURE_SETS = {
+    "price only": PRICE_COLS,
+    "+market": PRICE_COLS + MARKET_COLS,
+    "+sector": PRICE_COLS + MARKET_COLS + SECTOR_COLS,
+    "+FII": PRICE_COLS + MARKET_COLS + FII_COLS,
+    "+sector+FII": BASE_COLS,
+}
 
 
 def fit_predict(train: pd.DataFrame, test: pd.DataFrame, cols: list[str]) -> pd.Series:
@@ -28,7 +34,7 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, cols: list[str]) -> pd.
 
 def main() -> None:
     df = pd.read_csv(FEATURES_FILE, index_col=0, parse_dates=True)
-    df = df.dropna(subset=["target"] + PRICE_COLS + MARKET_COLS).sort_index()
+    df = df.dropna(subset=["target"] + BASE_COLS).sort_index()
     df["month"] = df.index.to_period("M")
 
     months = sorted(df["month"].unique())[MIN_TRAIN_MONTHS:]
