@@ -126,10 +126,17 @@ FII_DII_CASH_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 RECENT_DAYS = 3  # a 404 this recent may just mean "not published yet", so don't record it as a holiday
 
 
-def new_session() -> requests.Session:
-    session = requests.Session()
-    session.get("https://www.nseindia.com", headers=HEADERS, timeout=30)  # pick up cookies
-    return session
+def new_session(retries: int = 3) -> requests.Session:
+    """Session with NSE cookies. Raises requests.RequestException if NSE stays unreachable."""
+    for attempt in range(1, retries + 1):
+        session = requests.Session()
+        try:
+            session.get("https://www.nseindia.com", headers=HEADERS, timeout=30)  # pick up cookies
+            return session
+        except requests.RequestException:
+            if attempt == retries:
+                raise
+            time.sleep(5 * attempt)
 
 
 def backfill(source: str, days: int, done: set, fetch, pause: float) -> list:
@@ -141,20 +148,33 @@ def backfill(source: str, days: int, done: set, fetch, pause: float) -> list:
     MARKET_DIR.mkdir(parents=True, exist_ok=True)
     no_data = json.loads(NO_DATA_FILE.read_text()) if NO_DATA_FILE.exists() else {}
     skip = set(no_data.get(source, []))
-    session, rows, today, calls = new_session(), [], date.today(), 0
+    rows, today, calls, failures_in_a_row = [], date.today(), 0, 0
+    try:
+        session = new_session()
+    except requests.RequestException as e:
+        print(f"{source}: NSE unreachable, skipped this run ({type(e).__name__})")
+        return rows
 
     for offset in range(days, -1, -1):
         day = today - timedelta(days=offset)
         if day.weekday() >= 5 or day in done or day.isoformat() in skip:
             continue
         calls += 1
-        if calls % 400 == 0:
-            session = new_session()
         try:
+            if calls % 400 == 0:
+                session = new_session()
             row = fetch(session, day)
-        except (requests.RequestException, KeyError, ValueError, IndexError) as e:
+        except requests.RequestException as e:
+            failures_in_a_row += 1
+            print(f"{source} {day}: skipped ({type(e).__name__})")
+            if failures_in_a_row >= 10:  # connection is down; stop and keep what we have
+                print(f"{source}: {failures_in_a_row} network errors in a row, stopping (rerun later to resume)")
+                break
+            continue
+        except (KeyError, ValueError, IndexError) as e:
             print(f"{source} {day}: skipped ({type(e).__name__})")
             continue
+        failures_in_a_row = 0
         if row is None:
             if day < today - timedelta(days=RECENT_DAYS):
                 skip.add(day.isoformat())
@@ -263,8 +283,11 @@ def fetch_dii_day(session: requests.Session, day: date) -> dict | None:
     out = {"Date": pd.Timestamp(day)}
     for kind, tag in (("fao_participant_vol", "vol"), ("fao_participant_oi", "oi")):
         resp = session.get(PARTICIPANT_URL.format(kind, day), headers=HEADERS, timeout=30)
-        if resp.status_code == 404:  # market holiday
-            return None
+        if resp.status_code == 404:
+            if tag == "vol":
+                return None  # market holiday
+            # vol existed but oi didn't: don't record the day as a holiday, retry it next run
+            raise ValueError(f"oi file missing for {day}")
         resp.raise_for_status()
         df = pd.read_csv(io.StringIO(resp.text), skiprows=1)
         df.columns = df.columns.str.strip()
@@ -282,6 +305,9 @@ def collect_daily_table(source: str, path: Path, fetch, days: int = FII_DAYS) ->
     rows = backfill(source, days, done, fetch, pause=0.15)
     print(f"{source}: {len(rows)} new days")
     frames = ([saved] if saved is not None else []) + ([pd.DataFrame(rows)] if rows else [])
+    if not frames:
+        print(f"{source}: nothing saved yet and nothing fetched")
+        return pd.DataFrame()
     result = pd.concat(frames).drop_duplicates(subset="Date").sort_values("Date")
     result.to_csv(path, index=False)
     return result
@@ -388,8 +414,8 @@ def main() -> None:
     collect_daily_table("dii", DII_FILE, fetch_dii_day)
     try:
         collect_fii_dii_cash()
-    except (requests.RequestException, ValueError) as e:
-        print(f"fii/dii cash: skipped ({e})")
+    except (requests.RequestException, ValueError, KeyError) as e:
+        print(f"fii/dii cash: skipped ({type(e).__name__})")
     collect_market_context()
     collect_fundamentals()
     delivery = collect_delivery()

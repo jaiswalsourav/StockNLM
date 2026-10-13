@@ -116,7 +116,9 @@ def context_features(index: pd.DatetimeIndex) -> pd.DataFrame:
         out["vix_chg_1d"] = vix.pct_change()
         out["vix_vs_20d"] = vix / vix.rolling(20, min_periods=10).mean() - 1
     if "banknifty" in ctx:
-        bn = ctx["banknifty"]
+        # context.csv mixes calendars (USD/INR trades on Indian holidays), so drop Bank Nifty's empty rows
+        # first; otherwise a holiday leaves the next 1-5 days of returns empty
+        bn = ctx["banknifty"].dropna()
         out["banknifty_return_1d"] = bn.pct_change().reindex(index)
         out["banknifty_return_5d"] = bn.pct_change(5).reindex(index)
 

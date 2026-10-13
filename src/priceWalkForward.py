@@ -1,7 +1,8 @@
 """Walk-forward test: retrain every month on all earlier data, then score that month.
 
-Compares price-only features against price + NIFTY market features, month by month,
-so the result doesn't depend on one lucky (or unlucky) test window.
+Compares feature groups on the next-day up/down target, month by month, so the result
+doesn't depend on one lucky (or unlucky) test window. (priceModel.py covers the
+beat-the-median target.)
 
 Usage:
     python src/priceWalkForward.py
@@ -11,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-from priceFeature import BASE_COLS, FII_COLS, MARKET_COLS, PRICE_COLS, SECTOR_COLS
+from priceFeature import BASE_COLS, CORE_COLS, FII_COLS, MARKET_COLS, PRICE_COLS, SECTOR_COLS
 
 FEATURES_FILE = Path(__file__).resolve().parent.parent / "data" / "features.csv"
 MIN_TRAIN_MONTHS = 12
@@ -20,7 +21,8 @@ FEATURE_SETS = {
     "+market": PRICE_COLS + MARKET_COLS,
     "+sector": PRICE_COLS + MARKET_COLS + SECTOR_COLS,
     "+FII": PRICE_COLS + MARKET_COLS + FII_COLS,
-    "+sector+FII": BASE_COLS,
+    "+sector+FII": CORE_COLS,
+    "+DII+context": BASE_COLS,  # these columns may be empty on some days; the forest handles NaN
 }
 
 
@@ -34,7 +36,7 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, cols: list[str]) -> pd.
 
 def main() -> None:
     df = pd.read_csv(FEATURES_FILE, index_col=0, parse_dates=True)
-    df = df.dropna(subset=["target"] + BASE_COLS).sort_index()
+    df = df.dropna(subset=["target"] + CORE_COLS).sort_index()
     df["month"] = df.index.to_period("M")
 
     months = sorted(df["month"].unique())[MIN_TRAIN_MONTHS:]
